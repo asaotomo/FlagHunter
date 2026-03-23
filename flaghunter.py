@@ -17,7 +17,7 @@ CONFIG_FILE = 'config.yml'
 LOG_FILE = 'found_flags.log'
 
 DEFAULT_CONFIG = {
-    'flag_rules': [{'prefix': 'flag'}],
+    'flag_rules': [{'prefix': 'flag'}, {'prefix': 'ctf'}, {'prefix': 'CTF'}, {'prefix': 'FLAG'}],
     'scan_cooldown': 10,
     'max_file_size_mb': 100,
     'context_bytes': 40
@@ -92,11 +92,16 @@ def build_regex_from_rules(rules):
         if not prefix:
             continue
         try:
-            patterns.append((f"Plaintext ({prefix})", re.compile(prefix.encode() + b'\\{[^\\}]+\\}', re.IGNORECASE)))
+            # 明文格式 - 更宽松的匹配，允许任何字符直到闭合大括号
+            patterns.append((f"Plaintext ({prefix})", re.compile(prefix.encode() + b'\\{[\\s\\S]*?\\}', re.DOTALL)))
+            # Base64 格式
             b64 = base64.b64encode((prefix + "{").encode()).rstrip(b'=')
             patterns.append((f"Base64 ({prefix})", re.compile(re.escape(b64) + b'[A-Za-z0-9+/=]{10,}')))
+            # Hex 格式
             hex_prefix = binascii.hexlify((prefix + "{").encode())
             patterns.append((f"Hex ({prefix})", re.compile(re.escape(hex_prefix) + b'[0-9a-fA-F]{10,}')))
+            # 直接匹配前缀，用于二进制文件
+            patterns.append((f"Raw ({prefix})", re.compile(prefix.encode() + b'.{10,}')))
         except Exception as e:
             log_warn(f"规则错误: {e}")
     return patterns
