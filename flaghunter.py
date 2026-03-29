@@ -12,6 +12,8 @@ import binascii
 from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+import openpyxl
+from openpyxl.utils import get_column_letter
 
 CONFIG_FILE = 'config.yml'
 LOG_FILE = 'found_flags.log'
@@ -108,6 +110,7 @@ def build_regex_from_rules(rules):
 
 flag_counter = 0
 scanned_files = {}
+found_flags = []
 
 def _report_flag(buffer, file_path, context_bytes, rules):
     global flag_counter
@@ -175,6 +178,19 @@ def _report_flag(buffer, file_path, context_bytes, rules):
                 + f"Context:\n{ctx}\n" + "=" * 40
             )
             log_flag_to_file(log_text)
+            
+            # Add flag information to the list
+            found_flags.append({
+                'counter': flag_counter,
+                'timestamp': timestamp,
+                'file_path': file_path,
+                'type': name,
+                'line': line_num,
+                'offset': offset,
+                'flag': flag_text,
+                'decoded': decoded,
+                'context': ctx
+            })
 
 def scan_file(path, ignore, rules, max_size, ctx_bytes):
     try:
@@ -194,12 +210,88 @@ def scan_file(path, ignore, rules, max_size, ctx_bytes):
     except Exception:
         pass
 
+def clean_text(text):
+    """Clean text to remove characters not supported in Excel"""
+    if text is None:
+        return ''
+    if isinstance(text, bytes):
+        try:
+            text = text.decode('utf-8', errors='replace')
+        except:
+            text = repr(text)
+    # Remove any characters that are not supported in Excel
+    # Excel doesn't support control characters (0x00-0x1F except 0x09, 0x0A, 0x0D)
+    result = []
+    for c in text:
+        code = ord(c)
+        # Allow printable characters and tabs, newlines, carriage returns
+        if code >= 32 or code in (9, 10, 13):
+            result.append(c)
+    return ''.join(result)
+
+def save_flags_to_xlsx():
+    if not found_flags:
+        log_info("没有找到flag，跳过保存到xlsx")
+        return
+    
+    try:
+        # Create a new workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "找到的Flags"
+        
+        # Set headers
+        headers = ['序号', '时间戳', '文件路径', '类型', '行号', '偏移量', 'Flag', '解码', '上下文']
+        for col_num, header in enumerate(headers, 1):
+            col_letter = get_column_letter(col_num)
+            ws[f'{col_letter}1'] = header
+        
+        # Add data
+        for row_num, flag in enumerate(found_flags, 2):
+            try:
+                ws[f'A{row_num}'] = flag['counter']
+                ws[f'B{row_num}'] = clean_text(flag['timestamp'])
+                ws[f'C{row_num}'] = clean_text(flag['file_path'])
+                ws[f'D{row_num}'] = clean_text(flag['type'])
+                ws[f'E{row_num}'] = flag['line']
+                ws[f'F{row_num}'] = flag['offset']
+                ws[f'G{row_num}'] = clean_text(flag['flag'])
+                ws[f'H{row_num}'] = clean_text(flag['decoded']) if flag['decoded'] else ''
+                ws[f'I{row_num}'] = clean_text(flag['context'])
+            except Exception as e:
+                log_warn(f"保存第{flag['counter']}个flag时出错: {e}")
+                # Skip this flag and continue
+                continue
+        
+        # Auto-adjust column widths
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Save the workbook
+        xlsx_file = f"found_flags_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        wb.save(xlsx_file)
+        log_info(f"已将{len(found_flags)}个flag保存到{os.path.abspath(xlsx_file)}")
+    except Exception as e:
+        import traceback
+        log_error(f"保存到xlsx文件失败: {e}")
+        log_error(traceback.format_exc())
+
 def initial_scan(dir_path, ignore, rules, max_size, ctx_bytes):
     log_info(f"开始初始扫描: {dir_path}")
     for root, _, files in os.walk(dir_path):
         for name in files:
             scan_file(os.path.join(root, name), ignore, rules, max_size, ctx_bytes)
     log_info("初始扫描完成")
+    save_flags_to_xlsx()
 
 def process_event(path, ignore, rules, max_size, ctx_bytes, cooldown):
     now = time.time()
@@ -241,9 +333,10 @@ class WatchHandler(FileSystemEventHandler):
         process_event(event.dest_path, self.ignore, self.rules, self.max_size, self.ctx_bytes, self.cooldown)
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print(f"用法: python {sys.argv[0]} <目录>")
-        sys.exit(1)
+    if len(sys.argv) >= 2:
+        watch_dir = sys.argv[1]
+    else:
+        watch_dir = "."
 
     if IS_WIN:
         os.system("color")
@@ -251,7 +344,6 @@ if __name__ == "__main__":
     os.system("clear" if not IS_WIN else "cls")
     banner()
 
-    watch_dir = sys.argv[1]
     if not os.path.isdir(watch_dir):
         log_error("提供的路径无效。")
         sys.exit(1)
@@ -264,11 +356,14 @@ if __name__ == "__main__":
     ctx_bytes = config['context_bytes']
     max_size = config['max_file_size_mb'] * 1024 * 1024
 
+    # 获取脚本自身的绝对路径
+    script_path = os.path.abspath(sys.argv[0])
     ignore = {
         os.path.abspath(CONFIG_FILE),
         os.path.abspath(LOG_FILE),
-        os.path.abspath(sys.argv[0])
+        script_path
     }
+    log_info(f"忽略文件: {script_path}")
 
     log_info(f"忽略文件数: {len(ignore)}")
     initial_scan(watch_dir, ignore, rules, max_size, ctx_bytes)
