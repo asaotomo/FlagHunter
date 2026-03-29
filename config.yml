@@ -79,3 +79,13 @@ scan_cooldown: 1         # 同一文件的最小重复扫描间隔 (秒)
 max_file_size_mb: 10000   # 最大扫描文件大小 (单位: MB)
 context_bytes: 40         # Flag 命中结果上下文展示字节数
 
+# --- 3. 行数据搜索规则 (Line Search Rules) ---
+# 用于搜索同时包含多个指定字符串的行数据
+line_search_rules:
+  - name: "包含 - 和 }"
+    includes: ["-", "}"]
+  - name: "包含 CTF{ 和 - 和 }"
+    includes: ["CTF{", "-", "}"]
+  - name: "包含 key 和 。"
+    includes: ["key", "。"]
+
