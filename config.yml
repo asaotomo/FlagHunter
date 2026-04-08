@@ -14,24 +14,58 @@
 #   - hex_plain : 纯十六进制形式，如 666c6167
 
 flag_rules:
-  # 示例 1：搜索 "flag"，启用所有编码模式（默认推荐）
   - prefix: "flag"
     variants:
       plaintext: true
       base64: true
       hex_curly: true
       hex_plain: true
-
-  # 示例 2：搜索 "wdctf"，启用所有编码模式
-  - prefix: "wdctf"
+  - prefix: "FLAG"
+    variants:
+      plaintext: true
+      base64: true
+      hex_curly: true
+      hex_plain: true
+  - prefix: "f14"
+    variants:
+      plaintext: true
+      base64: true
+      hex_curly: true
+      hex_plain: true
+  - prefix: "f1a"
+    variants:
+      plaintext: true
+      base64: true
+      hex_curly: true
+      hex_plain: true
+  - prefix: "CTF"
     variants:
       plaintext: true
       base64: true
       hex_curly: true
       hex_plain: true
 
-  # 示例 3：搜索 "nssctf"，启用所有编码模式
-  - prefix: "nssctf"
+  - prefix: "ctf"
+    variants:
+      plaintext: true
+      base64: true
+      hex_curly: true
+      hex_plain: true
+
+  - prefix: "102,108"
+    variants:
+      plaintext: true
+      base64: true
+      hex_curly: true
+      hex_plain: true
+
+  - prefix: "102 108"
+    variants:
+      plaintext: true
+      base64: true
+      hex_curly: true
+      hex_plain: true
+  - prefix: "Zmxh"
     variants:
       plaintext: true
       base64: true
@@ -44,3 +78,14 @@ flag_rules:
 scan_cooldown: 1         # 同一文件的最小重复扫描间隔 (秒)
 max_file_size_mb: 10000   # 最大扫描文件大小 (单位: MB)
 context_bytes: 40         # Flag 命中结果上下文展示字节数
+
+# --- 3. 行数据搜索规则 (Line Search Rules) ---
+# 用于搜索同时包含多个指定字符串的行数据
+line_search_rules:
+  - name: "包含 - 和 }"
+    includes: ["-", "}"]
+  - name: "包含 CTF{ 和 - 和 }"
+    includes: ["CTF{", "-", "}"]
+  - name: "包含 key 和 。"
+    includes: ["key", "。"]
+
